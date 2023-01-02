@@ -9,26 +9,25 @@ const auth = require('./middlewares/auth');
 
 app.use(express.json());
 
-app.use((req,res,next)=>{
+app.use((req, res, next) => {
     console.log("HTTP Method : " + req.method + "\nURL : " + req.url)
     next();
 })
 
-app.use('/users',userRouter);
-app.use('/notes',noteRouter);
+app.use('/users', userRouter);
+app.use('/notes', noteRouter);
 
-app.get('/',(req,res)=>{
+app.get('/', (req, res) => {
     console.log('Hello')
     res.send("<h1>hello world</h1>")
 })
 
 mongoose.connect('mongodb://localhost:27017/signInSignUpUserData')
-.then(()=>{
-    app.listen(5000,()=>{
-        console.log("server is running at note 5000");
+    .then(() => {
+        app.listen(5000, () => {
+            console.log("server is running at note 5000");
+        })
     })
-})
-.catch((error)=>{
-    console.log(error);
-})
-
+    .catch((error) => {
+        console.log(error);
+    })

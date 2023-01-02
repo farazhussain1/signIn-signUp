@@ -1,24 +1,29 @@
 const e = require('express');
 const jwt = require('jsonwebtoken')
-const SECRET_KEY= "notesAPI"
+const SECRET_KEY = "notesAPI"
 
-const auth = (req,res,next)=>{
+const auth = (req, res, next) => {
     try {
-        let token = req.headers.autherization;
-        if(token){
+//        console.log('headers==== ', req.headers);
+        let token = req.headers.authorization;
+        if (token) {
             token = token.split(" ")[1]
-            let user = jwt.verify(token,SECRET_KEY)
+            let user = jwt.verify(token, SECRET_KEY)
+            console.log(user);
             req.userId = user.id
         }
-        else{
-            res.status(401).json({message : "Unauthorize User"});
+        else {
+            res.status(401).json({ message: "Unauthorize User" });
         }
         next();
     } catch (error) {
+        console.log("error is here")
         console.log(error)
-        res.status(401).json({message : "Unauthorize User"});
+        res.status(401).json({ message: "Unauthorize Users" });
     }
 }
+
+module.exports = {auth};
 
 // const auth = (req,res,next)=>{
 //     if(!req.query.age){
@@ -31,5 +36,3 @@ const auth = (req,res,next)=>{
 //         next()
 //     }
 // }
-
-// module.exports = auth;
