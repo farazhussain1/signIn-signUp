@@ -53,34 +53,58 @@ const signIn = async (req, res) => {
             return res.status(400).json({ message: "Invalid Password" });
         }
 
+        //TOKEN GENERATED
         const token = jwt.sign({ email: existingUser.email, id: existingUser._id }, SECRET_KEY, {expiresIn: '600s'});
-        res.status(201).json({ message: "Successfuly Login " , user: existingUser, token: token });
+        const newtoken = "Bearer " + token;
+
+        let oldTokens = existingUser.tokens || []
+
+        if (oldTokens) {
+            oldTokens = oldTokens.filter(t => {
+                const timediff = (Date.now() - parseInt(t.signedAt)) / 1000;
+                console.log(timediff)
+                if (timediff < 600) {
+                    return t;
+                }
+            })
+        }
+        await userModel.findByIdAndUpdate(existingUser._id, { tokens: [...oldTokens, { token, signedAt: Date.now().toString() }], })
+    
+        console.log(newtoken)
+        // return res.status(200).json({ message: "Successfuly Login " + newtoken });
+
+        res.status(201).json({ message: "Successfuly Login " , newtoken: newtoken , user: existingUser });
 
     } catch (error) {
         console.log(error);
         res.status(500).json({ message: "Something went wrong" })
     }
-
 }
 
-
 const signOut = async (req, res) => {
-
     try {
+        //TOKEN THAT WILL BE REMPVED
         let token = req.headers.authorization
         token = token.split(" ")[1]
-        const existingUser = await userModel.findOne({ username: req.user.username })
+
+        // Getting user details to logout
+        const existingUser = await userModel.findOne({ _id: req.userId })
         if (!existingUser) {
             return res.status(404).json({ message: "user didn't exists" });
         }
+        // Storing all the available tokens
         const oldTokens = existingUser.tokens
-        const newTokens = oldTokens.filter(t=>t.token!=token)
+        // filtering oldtokens 
+        // Taking out the matching token out of it 
+        // And storing rest
+        const newTokens = oldTokens.filter(t => t.token != token)
 
-        await userModel.findByIdAndUpdate(existingUser._id,{tokens:newTokens})
-    
+        // Updating tokens without the current token through which it's login
+        await userModel.findByIdAndUpdate(existingUser._id, { tokens: newTokens })
+
         console.log(newTokens)
-        res.status(200).json({message: "Logout Successfully"})
-        
+        res.status(200).json({ message: "Logout Successfully" })
+
     } catch (err) {
         console.log(err);
         res.status(400).json({ message: 'something happened' })
