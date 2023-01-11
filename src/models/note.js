@@ -1,5 +1,7 @@
 const mongoose = require('mongoose')
 
+mongoose.set('strictQuery', false);
+
 const NoteSchema = mongoose.mongoose.Schema({
     title:{
         type: String,
@@ -12,7 +14,10 @@ const NoteSchema = mongoose.mongoose.Schema({
     userId:{
         type: mongoose.Schema.Types.ObjectId,
         require: true
-    }
+    },
+    fileLoc:[{
+        type: Object
+    }]
 },{timestamps : true});
 
 module.exports = mongoose.model("Note",NoteSchema);

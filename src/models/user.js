@@ -13,7 +13,10 @@ const UserSchema = mongoose.mongoose.Schema({
         type: String,
         require: true
     },
-    tokens :  [{type:Object}]
+    isVerified :  {
+        type: Boolean,
+        default: false
+    }
     
 },{timestamps : true});
 

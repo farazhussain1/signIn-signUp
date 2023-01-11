@@ -1,114 +1,302 @@
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const joi = require("joi");
+const { isValidObjectId } = require("mongoose");
+const Uuid = require("uuid");
+
 const userModel = require("./../models/user");
-const bcrypt = require("bcrypt")
-const jwt = require("jsonwebtoken")
-const SECRET_KEY = "notesAPI"
+const { transport } = require("../mail/mail.config");
 
+const SECRET_KEY = "notesAPI";
 
-const signUp = async (req, res) => {
+class UsersController {
+  static forgetPasswordData = {};
+  constructor() {
+    this.forgetPasswordData;
+  }
 
-    ///Check Weather user is existing or not
-    // Hash password
-    // User Creation
-    // token generation
+  /**
+   * @description Registers the new user and checks weather id is already in use or not
+   * @param {import("express").Request} req
+   * @param {import("express").Response} res
+   * @returns
+   */
+  async signUp(req, res) {
+    const validation = joi
+      .object()
+      .keys({
+        username: joi.string().required().min(3),
+        password: joi.string().required().min(8),
+        email: joi.string().required().email(),
+      })
+      .validate(req.body);
+
+    if (validation.error) {
+      return res.status(400).json({ errors: validation.error.details });
+    }
 
     const { username, password, email } = req.body;
 
     try {
-        const existingUser = await userModel.findOne({ email: email })
-        if (existingUser) {
-            return res.status(403).json({ message: "user already exists" });
+      // FINDING USER AND SENDING RESPONSE IF ALREADY AVAILABLE
+      const existingUser = await userModel.findOne({ email: email });
+      if (existingUser) {
+        return res.status(403).json({ message: "user already exists" });
+      }
+
+      // HASHING PASSWORD
+      const hashPassword = await bcrypt.hash(password, 10);
+
+      // STORING NEW USER IN DATABASE AND CREATING AN OBJECT
+      const userObj = await userModel.create({
+        email: email,
+        password: hashPassword,
+        username: username,
+      });
+
+      // USER PASSWORD IS CLEARED FROM NEW USEROBJ
+      const user = { ...userObj._doc };
+      delete user.password;
+
+      // send mail with defined transport object
+      let info = await transport.sendMail({
+        from: '"Fred Foo 👻" <foo@example.com>', // sender address
+        to: user.email,
+        subject: "Verification ✔", // Subject line
+        html: `<a href="http://localhost:5000/users/verify/${user._id}">Click here to verify</a>`, // html body
+      });
+
+      // IF EMAIL IS NOT SENT THEN DELETE BACK THE USER ADDED IN DATABASE AND SENDS THE RESPONSE
+      if (info.rejected.includes(user.email)) {
+        const deleteUser = await userModel.findByIdAndRemove(user._id);
+        if (!deleteUser) {
+          console.log("Was not able to delete back user");
         }
+        return res
+          .status(400)
+          .json({ message: "kindly check you provided valid email or not" });
+      }
 
-        const hashPassword = await bcrypt.hash(password, 10);
-
-        const result = await userModel.create({
-            email: email,
-            password: hashPassword,
-            username: username
-        });
-
-        const token = jwt.sign({ email: result.email, id: result._id }, SECRET_KEY, {expiresIn: '600s'});
-        return res.status(200).json({ user: result, token: token });
-
+      return res.status(200).json({
+        message: `New User Created! email send to ${user.email}`,
+        user,
+      });
     } catch (error) {
-        console.log(error);
-        return res.status(500).json({ message: "Something went wrong" })
+      // PRINTING ERROR MESSAGE
+      console.log(error);
+      return res.status(500).json({ message: "Something went wrong" });
     }
-}
+  }
 
-const signIn = async (req, res) => {
-
+  /**
+   * @description User authentication check and login
+   * @param {import("express").Request} req
+   * @param {import("express").Response} res
+   * @returns
+   */
+  async signIn(req, res) {
     const { email, password } = req.body;
 
     try {
-        //FINDING USER AND SENDING RESPONSE IF NOT AVAILABLE
-        const existingUser = await userModel.findOne({ email: email })
-        if (!existingUser) {
-            return res.status(404).json({ message: "user didn't exists" });
-        }
+      //FINDING USER AND SENDING RESPONSE IF NOT AVAILABLE
+      const user = await userModel.findOne({ email: email });
+      if (!user) {
+        return res.status(400).json({ message: "Invalid Email/Password" });
+      }
 
-        //CHECKING PASSWORD WITH THE EXISTING_USER AND SENDING RESPONSE IF NOT AVAILABLE
-        const matchPassword = await bcrypt.compare(password, existingUser.password);
-        if (!matchPassword) {
-            return res.status(400).json({ message: "Invalid Password" });
-        }
+      // CHECK WEATHER USER HAS VERFIED HIS EMAIL OR NOT
+      if (!user.isVerified) {
+        return res.status(404).json({
+          message:
+            "Email not verified !! You haven't verified your email plz do that first",
+        });
+      }
 
-        //TOKEN GENERATED
-        const token = jwt.sign({ email: existingUser.email, id: existingUser._id }, SECRET_KEY, {expiresIn: '600s'});
-        const newtoken = "Bearer " + token;
+      //CHECKING PASSWORD WITH THE MATCHED EXISTING_USER PASSWORD AND SENDING RESPONSE IF NOT AVAILABLE
+      const matchPassword = await bcrypt.compare(password, user.password);
+      console.log(matchPassword);
+      if (!matchPassword) {
+        return res.status(400).json({ message: "Invalid Email/Password" });
+      }
 
-        let oldTokens = existingUser.tokens || []
+      //TOKEN GENERATED
+      const token = jwt.sign({ email: user.email, id: user._id }, SECRET_KEY, {
+        expiresIn: "24h",
+      });
 
-        if (oldTokens) {
-            oldTokens = oldTokens.filter(t => {
-                const timediff = (Date.now() - parseInt(t.signedAt)) / 1000;
-                console.log(timediff)
-                if (timediff < 600) {
-                    return t;
-                }
-            })
-        }
-        await userModel.findByIdAndUpdate(existingUser._id, { tokens: [...oldTokens, { token, signedAt: Date.now().toString() }], })
-    
-        console.log(newtoken)
-        // return res.status(200).json({ message: "Successfuly Login " + newtoken });
+      const userObj = { ...user._doc };
+      delete userObj.password;
 
-        res.status(201).json({ message: "Successfuly Login " , newtoken: newtoken , user: existingUser });
-
+      res.cookie("authorization", token);
+      res.status(201).json({
+        message: "Successfuly Login ",
+        token: token,
+        user: userObj,
+      });
     } catch (error) {
-        console.log(error);
-        res.status(500).json({ message: "Something went wrong" })
+      console.log(error);
+      res.status(500).json({ message: "Something went wrong" });
     }
-}
+  }
 
-const signOut = async (req, res) => {
+  /**
+   * @description Sign out process with user authentication check
+   * @param {import("express").Request} req
+   * @param {import("express").Response} res
+   * @returns
+   */
+  async signOut(req, res) {
     try {
-        //TOKEN THAT WILL BE REMPVED
-        let token = req.headers.authorization
-        token = token.split(" ")[1]
+      // Taking token from the cookie
+      let token = req.cookies.authorization;
+      console.log(token);
 
-        // Getting user details to logout
-        const existingUser = await userModel.findOne({ _id: req.userId })
-        if (!existingUser) {
-            return res.status(404).json({ message: "user didn't exists" });
-        }
-        // Storing all the available tokens
-        const oldTokens = existingUser.tokens
-        // filtering oldtokens 
-        // Taking out the matching token out of it 
-        // And storing rest
-        const newTokens = oldTokens.filter(t => t.token != token)
-
-        // Updating tokens without the current token through which it's login
-        await userModel.findByIdAndUpdate(existingUser._id, { tokens: newTokens })
-
-        console.log(newTokens)
-        res.status(200).json({ message: "Logout Successfully" })
-
+      // Expiring the token in the cookie
+      res.cookie("authorization", "null", { expiresIn: Date.now() });
+      res.status(200).json({ message: "Logout Successfully" });
     } catch (err) {
-        console.log(err);
-        res.status(400).json({ message: 'something happened' })
+      console.log(err);
+      res.status(400).json({ message: "something happened" });
     }
+  }
+
+  /**
+   * @description Verifies the Email provided at the time of signUp. Also checks the mongoID/UserId provided is valid or not
+   * @param {import("express").Request} req
+   * @param {import("express").Response} res
+   * @returns
+   */
+  async verifyEmail(req, res) {
+    const id = req.params.id;
+    try {
+      const isValidMongoId = isValidObjectId(id);
+
+      if (isValidMongoId) {
+        //FINDING USER AND UPDATING EMAIL VERIFICATION FIELD
+        const user = await userModel.findByIdAndUpdate(
+          id,
+          { isVerified: true },
+          {
+            new: true,
+          }
+        );
+
+        // IF USER DOESN'T EXISTS IT RETURNS
+        if (!user) {
+          return res.status(404).json({ message: "user didn't exists" });
+        }
+        return res
+          .status(200)
+          .send("<h1>Success you are verified user now</h1>");
+      }
+      return res.status(400).json({ message: "inValid Mongo ID" });
+    } catch (err) {
+      return res.status(500).json({ message: "something went wrong" });
+    }
+  }
+
+  /**
+   * @description Verifies the Email provided at the time of signUp. Also checks the mongoID/UserId provided is valid or not
+   * @param {import("express").Request} req
+   * @param {import("express").Response} res
+   * @returns
+   */
+  async forgotPassword(req, res) {
+    const validator = joi
+      .object()
+      .keys({
+        email: joi.string().required().email(),
+      })
+      .validate(req.body);
+
+    if (validator.error) {
+      return res.status(400).json({ errors: validator.error.details });
+    }
+
+    const email = req.body.email;
+    const user = await userModel.exists({ email: email });
+    if (!user) {
+      return res.status(400).json({ message: "Invalid Email" });
+    }
+    try {
+      const uuid = Uuid.v4();
+      this.forgetPasswordData[uuid] = {
+        email: email,
+        timestamp: Date.now(),
+      };
+
+      //TOKEN GENERATED
+      const token = jwt.sign({ uuid }, SECRET_KEY, {
+        expiresIn: "120s",
+      });
+
+      console.log(token);
+
+      let info = await transport.sendMail({
+        from: '"Fred Foo 👻" <foo@example.com>', // sender address
+        to: email,
+        subject: "Change Password ✔", // Subject line
+        html: `<a href="http://localhost:5000/users/changePassword/${token}">Click here to change your password</a>`, // html body
+      });
+
+      console.log(info.accepted);
+
+      // IF EMAIL IS NOT SENT THEN DELETE BACK THE USER ADDED IN DATABASE AND SENDS THE RESPONSE
+      if (info.rejected.includes(email)) {
+        return res.status(400).json({ message: "Invalid Email" });
+      }
+
+      res.cookie("authorization", token);
+      res.status(201).json({
+        message: "Email sent !! kindly check inbox for password change",
+        token: token,
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  async changePassword(req, res) {
+    const token = req.params.token;
+
+    const validator = joi
+      .object()
+      .keys({
+        password: joi.string().required().min(8),
+      })
+      .validate(req.body);
+
+    if (validator.error) {
+      return res.status(400).json({ err: validator.error.message });
+    }
+    try {
+      const { password } = req.body;
+      let uuid = null;
+      jwt.verify(token, SECRET_KEY, (err, payload) => {
+        if (err)
+          res.status(400).json({ message: "link is expired, try again!" });
+        uuid = payload.uuid;
+      });
+
+      const data = this.forgetPasswordData[uuid];
+
+      if(!data){
+        return res.status(400).json({message:"link is expired, try again!"})
+      }
+
+      const hashPassword = await bcrypt.hash(password,10);
+
+      const user = await userModel.updateOne({email: data.email},{$set:{password:hashPassword}});
+
+      if(!user.modifiedCount){
+        return res.status(400).json({message: "password could not be updated"})
+      }
+
+      return res.status(200).json({message: "Password Updated successfully"})
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
 }
 
-module.exports = { signUp, signIn, signOut }
+module.exports = UsersController;

@@ -1,18 +1,27 @@
-const express = require('express');
-const { getNote, updateNote, deleteNote, createNote, getNoteById, getNoteByTitle } = require('../controllers/noteController');
+const express = require("express");
 const noteRouter = express.Router();
-const { auth } = require('../middlewares/auth')
+const multer = require("multer");
 
-noteRouter.get('/', auth, getNote)
+const { auth } = require("../middlewares/auth");
+const storage = require("./../middlewares/multerUpload");
+const NotesController = require("../controllers/noteController");
 
-noteRouter.get('/:id', auth, getNoteById)
+const upload = multer({ storage: storage });
 
-noteRouter.get('/search/:title', auth, getNoteByTitle)
+const notes = new NotesController();
 
-noteRouter.post('/', auth, createNote);
+noteRouter.get("/download/:fileName", auth, notes.download);
 
-noteRouter.delete('/:id', auth, deleteNote);
+noteRouter.get("/", auth, notes.get);
 
-noteRouter.put('/:id', auth, updateNote);
+noteRouter.get("/:id", auth, notes.getById);
+
+noteRouter.get("/search/:title", auth, notes.getByTitle);
+
+noteRouter.post("/", auth, upload.array("file"), notes.create);
+
+noteRouter.delete("/:id", auth, notes.delete);
+
+noteRouter.put("/:id", auth, notes.update);
 
 module.exports = noteRouter;
