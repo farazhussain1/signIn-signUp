@@ -256,6 +256,12 @@ class UsersController {
     }
   }
 
+  /**
+   * @description Verifies the Token. Changes the password in the database
+   * @param {import("express").Request} req
+   * @param {import("express").Response} res
+   * @returns
+   */
   async changePassword(req, res) {
     const token = req.params.token;
 
@@ -280,19 +286,24 @@ class UsersController {
 
       const data = this.forgetPasswordData[uuid];
 
-      if(!data){
-        return res.status(400).json({message:"link is expired, try again!"})
+      if (!data) {
+        return res.status(400).json({ message: "link is expired, try again!" });
       }
 
-      const hashPassword = await bcrypt.hash(password,10);
+      const hashPassword = await bcrypt.hash(password, 10);
 
-      const user = await userModel.updateOne({email: data.email},{$set:{password:hashPassword}});
+      const user = await userModel.updateOne(
+        { email: data.email },
+        { $set: { password: hashPassword } }
+      );
 
-      if(!user.modifiedCount){
-        return res.status(400).json({message: "password could not be updated"})
+      if (!user.modifiedCount) {
+        return res
+          .status(400)
+          .json({ message: "password could not be updated" });
       }
 
-      return res.status(200).json({message: "Password Updated successfully"})
+      return res.status(200).json({ message: "Password Updated successfully" });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }

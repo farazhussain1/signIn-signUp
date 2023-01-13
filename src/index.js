@@ -1,7 +1,7 @@
 const express = require('express');
 const cookieParser = require('cookie-parser')
-const dotenv = require('dotenv')
-const dbConnect = require('./dbConnect')
+require('dotenv').config();
+require('./config/dbConnect')
 
 //routes
 const userRouter = require('./routes/userRoutes');
@@ -10,8 +10,6 @@ const noteRouter = require('./routes/noteRoutes');
 const port = process.env.PORT || 5000;
 // const key = process.env.secretKey || 'no'
 const app = express();
-dotenv.config();
-dbConnect();
 
 app.use(express.json());
 app.use(cookieParser());
