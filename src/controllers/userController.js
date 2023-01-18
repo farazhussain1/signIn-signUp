@@ -22,26 +22,28 @@ class UsersController {
    * @returns
    */
   async signUp(req, res) {
+    console.log(req.body);
     const validation = joi
       .object()
       .keys({
         username: joi.string().required().min(3),
-        password: joi.string().required().min(8),
         email: joi.string().required().email(),
+        password: joi.string().required().min(8),
       })
-      .validate(req.body);
+      .validate(req.body, { abortEarly: true });
 
     if (validation.error) {
       return res.status(400).json({ errors: validation.error.details });
     }
 
     const { username, password, email } = req.body;
+    console.log(req.body);
 
     try {
       // FINDING USER AND SENDING RESPONSE IF ALREADY AVAILABLE
       const existingUser = await userModel.findOne({ email: email });
       if (existingUser) {
-        return res.status(403).json({ message: "user already exists" });
+        return res.status(400).json({ message: "user already exists" });
       }
 
       // HASHING PASSWORD
@@ -63,7 +65,7 @@ class UsersController {
         from: '"Fred Foo 👻" <foo@example.com>', // sender address
         to: user.email,
         subject: "Verification ✔", // Subject line
-        html: `<a href="http://localhost:5000/users/verify/${user._id}">Click here to verify</a>`, // html body
+        html: `<a href="http://localhost:5000/api/users/verify/${user._id}">Click here to verify</a>`, // html body
       });
 
       // IF EMAIL IS NOT SENT THEN DELETE BACK THE USER ADDED IN DATABASE AND SENDS THE RESPONSE
@@ -78,7 +80,7 @@ class UsersController {
       }
 
       return res.status(200).json({
-        message: `New User Created! email send to ${user.email}`,
+        message: `Your account has been created successfully! \n Verification email sent to <b> ${user.email} </b>`,
         user,
       });
     } catch (error) {
@@ -96,6 +98,7 @@ class UsersController {
    */
   async signIn(req, res) {
     const { email, password } = req.body;
+    console.log(req.body);
 
     try {
       //FINDING USER AND SENDING RESPONSE IF NOT AVAILABLE
@@ -127,7 +130,11 @@ class UsersController {
       const userObj = { ...user._doc };
       delete userObj.password;
 
-      res.cookie("authorization", token);
+      res.cookie("authorization", token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+      });
       res.status(201).json({
         message: "Successfuly Login ",
         token: token,
@@ -236,7 +243,8 @@ class UsersController {
         from: '"Fred Foo 👻" <foo@example.com>', // sender address
         to: email,
         subject: "Change Password ✔", // Subject line
-        html: `<a href="http://localhost:5000/users/changePassword/${token}">Click here to change your password</a>`, // html body
+        // html: `<a href="http://localhost:5000/users/changePassword/${token}">Click here to change your password</a>`, // html body
+        html: `<a href="http://localhost:3000/change-password/${token}">Click here to change your password</a>`,
       });
 
       console.log(info.accepted);
