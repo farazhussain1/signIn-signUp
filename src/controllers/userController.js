@@ -159,7 +159,7 @@ class UsersController {
       console.log(token);
 
       // Expiring the token in the cookie
-      res.cookie("authorization", "null", { expiresIn: Date.now() });
+      res.cookie("authorization", "null", { maxAge:1 });
       res.status(200).json({ message: "Logout Successfully" });
     } catch (err) {
       console.log(err);
