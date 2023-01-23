@@ -1,8 +1,8 @@
-const express = require('express');
-const UsersController = require('../controllers/userController');
-const { auth } = require('../middlewares/auth');
+import express from 'express';
+import {UsersController} from '../controllers/userController';
+import { auth } from '../middlewares/auth';
 
-const userRouter = express.Router();
+export const userRouter = express.Router();
 
 const user = new UsersController()
 
@@ -18,4 +18,3 @@ userRouter.post("/forgotPassword", user.forgotPassword.bind(UsersController) );
 
 userRouter.post("/changePassword/:token", user.changePassword.bind(UsersController) );
 
-module.exports = userRouter;

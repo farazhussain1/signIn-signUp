@@ -1,16 +1,14 @@
-const noteModel = require("../models/note");
+import { Request, Response } from "express";
+import {NOTES} from "../models/note";
 
- class NotesController {
+ export class NotesController {
   
   /**
    * @description Get All Notes By UserId
-   * @param {import("express").Request} req
-   * @param {import("express").Response} res
-   * @returns
    */
-  async get(req, res) {
+  async get(req: Request, res: Response) {
     try {
-      const notes = await noteModel.find({ userId: req.userId });
+      const notes = await NOTES.find({ userId: req['userId'] });
       res.status(200).json(notes);
     } catch (error) {
       console.log(error);
@@ -27,7 +25,7 @@ const noteModel = require("../models/note");
   async getById(req, res) {
     const id = req.params.id;
     try {
-      const note = await noteModel.findOne({ userId: req.userId, _id: id });
+      const note = await NOTES.findOne({ userId: req.userId, _id: id });
       if (!note) {
         res.status(404).json({ message: "Note not found" });
       }
@@ -47,7 +45,7 @@ const noteModel = require("../models/note");
   async getByTitle(req, res) {
     const title = req.params.title;
     try {
-      const note = await noteModel.find({
+      const note = await  NOTES.find({
         $or: [{ title: { $regex: title } }, { description: { $regex: title } }],
       });
       if (!note) {
@@ -73,7 +71,7 @@ const noteModel = require("../models/note");
     console.log("file", req.file, "body", req.body);
 
     try {
-      const newNote = await noteModel.create({
+      const newNote = await  NOTES.create({
         title: title,
         description: description,
         userId: req.userId,
@@ -104,7 +102,7 @@ const noteModel = require("../models/note");
     };
 
     try {
-      const note = await noteModel.findByIdAndUpdate(id, newNote, {
+      const note = await  NOTES.findByIdAndUpdate(id, newNote, {
         new: true,
       });
       if (!note) {
@@ -126,7 +124,7 @@ const noteModel = require("../models/note");
   async delete(req, res) {
     const id = req.params.id;
     try {
-      const note = await noteModel.findByIdAndRemove(id);
+      const note = await  NOTES.findByIdAndRemove(id);
       if (!note) {
         res.status(404).json({ message: "Note not found" });
       }
@@ -143,10 +141,10 @@ const noteModel = require("../models/note");
    * @param {import("express").Response} res
    * @returns
    */
-  async download(req, res) {
+  async download(req , res) {
     const fileName = req.params.fileName;
     try {
-      let notes = await noteModel.findOne({
+      let notes = await  NOTES.findOne({
         userId: req.userId,
         fileLoc: { $elemMatch: { filename: fileName } },
       });
@@ -162,4 +160,3 @@ const noteModel = require("../models/note");
   }
 }
 
-module.exports = NotesController;

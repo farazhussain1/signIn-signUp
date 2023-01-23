@@ -1,14 +1,13 @@
-const express = require("express");
-const noteRouter = express.Router();
-const multer = require("multer");
+import express from "express";
+import multer from "multer";
+import { auth } from "../middlewares/auth";
+import storage from "./../middlewares/multerUpload";
+import { NotesController } from "../controllers/noteController";
 
-const { auth } = require("../middlewares/auth");
-const storage = require("./../middlewares/multerUpload");
-const NotesController = require("../controllers/noteController");
 
 const upload = multer({ storage: storage });
-
 const notes = new NotesController();
+export const noteRouter = express.Router();
 
 noteRouter.get("/download/:fileName", auth, notes.download);
 
@@ -24,4 +23,3 @@ noteRouter.delete("/:id", auth, notes.delete);
 
 noteRouter.put("/:id", auth, notes.update);
 
-module.exports = noteRouter;

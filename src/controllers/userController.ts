@@ -1,82 +1,72 @@
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const joi = require("joi");
-const { isValidObjectId } = require("mongoose");
-const Uuid = require("uuid");
-
-const userModel = require("./../models/user");
-const { transport } = require("../mail/mail.config");
+import bcrypt from "bcrypt";
+import { sign, verify } from "jsonwebtoken";
+import JOI from "joi";
+import { Document, isValidObjectId, Mongoose } from "mongoose";
+import { v4 } from "uuid"
+import { transport } from "../mail/mail.config";
+import { USER } from "../models/user";
+import { Request, Response } from "express";
 
 const SECRET_KEY = "notesAPI";
 
-class UsersController {
-  static forgetPasswordData = {};
-  constructor() {
-    this.forgetPasswordData;
+interface ForgetPassword {
+  [key: string]: {
+    email: string,
+    timestamp: number
   }
+}
+
+
+export class UsersController {
+  protected forgetPasswordData: ForgetPassword={};
+  constructor() {
+  }
+  
 
   /**
    * @description Registers the new user and checks weather id is already in use or not
-   * @param {import("express").Request} req
-   * @param {import("express").Response} res
-   * @returns
    */
-  async signUp(req, res) {
-    console.log(req.body);
-    const validation = joi
-      .object()
-      .keys({
-        username: joi.string().required().min(3),
-        email: joi.string().required().email(),
-        password: joi.string().required().min(8),
-      })
-      .validate(req.body, { abortEarly: true });
+  async signUp(req: Request, res: Response): Promise<Response<any, Record<string, any>>> {
+
+    const validation = JOI.object().keys({
+      username: JOI.string().required().min(3),
+      email: JOI.string().required().email(),
+      password: JOI.string().required().min(8),
+    }).validate(req.body, { abortEarly: true });
 
     if (validation.error) {
       return res.status(400).json({ errors: validation.error.details });
     }
 
-    const { username, password, email } = req.body;
-    console.log(req.body);
-
     try {
-      // FINDING USER AND SENDING RESPONSE IF ALREADY AVAILABLE
-      const existingUser = await userModel.findOne({ email: email });
+      const { username, password, email } = req.body;
+
+      const existingUser = await USER.findOne({ email: email });
       if (existingUser) {
         return res.status(400).json({ message: "user already exists" });
       }
 
-      // HASHING PASSWORD
-      const hashPassword = await bcrypt.hash(password, 10);
-
-      // STORING NEW USER IN DATABASE AND CREATING AN OBJECT
-      const userObj = await userModel.create({
+      const hashPassword = bcrypt.hashSync(password, 10);
+      const userObj:any = await USER.create({
         email: email,
         password: hashPassword,
         username: username,
       });
+      console.log(userObj._doc);
 
-      // USER PASSWORD IS CLEARED FROM NEW USEROBJ
       const user = { ...userObj._doc };
       delete user.password;
 
-      // send mail with defined transport object
-      let info = await transport.sendMail({
+      const info = await transport.sendMail({
         from: '"Fred Foo 👻" <foo@example.com>', // sender address
         to: user.email,
         subject: "Verification ✔", // Subject line
         html: `<a href="http://localhost:5000/api/users/verify/${user._id}">Click here to verify</a>`, // html body
       });
 
-      // IF EMAIL IS NOT SENT THEN DELETE BACK THE USER ADDED IN DATABASE AND SENDS THE RESPONSE
       if (info.rejected.includes(user.email)) {
-        const deleteUser = await userModel.findByIdAndRemove(user._id);
-        if (!deleteUser) {
-          console.log("Was not able to delete back user");
-        }
-        return res
-          .status(400)
-          .json({ message: "kindly check you provided valid email or not" });
+        userObj.remove()
+        return res.status(400).json({ message: "kindly check you provided valid email or not" });
       }
 
       return res.status(200).json({
@@ -84,25 +74,20 @@ class UsersController {
         user,
       });
     } catch (error) {
-      // PRINTING ERROR MESSAGE
-      console.log(error);
       return res.status(500).json({ message: "Something went wrong" });
     }
   }
 
   /**
    * @description User authentication check and login
-   * @param {import("express").Request} req
-   * @param {import("express").Response} res
-   * @returns
    */
-  async signIn(req, res) {
+  async signIn(req: Request, res: Response) {
     const { email, password } = req.body;
     console.log(req.body);
 
     try {
       //FINDING USER AND SENDING RESPONSE IF NOT AVAILABLE
-      const user = await userModel.findOne({ email: email });
+      const user:any = await USER.findOne({ email: email });
       if (!user) {
         return res.status(400).json({ message: "Invalid Email/Password" });
       }
@@ -116,14 +101,14 @@ class UsersController {
       }
 
       //CHECKING PASSWORD WITH THE MATCHED EXISTING_USER PASSWORD AND SENDING RESPONSE IF NOT AVAILABLE
-      const matchPassword = await bcrypt.compare(password, user.password);
+      const matchPassword = bcrypt.compareSync(password, user.password);
       console.log(matchPassword);
       if (!matchPassword) {
         return res.status(400).json({ message: "Invalid Email/Password" });
       }
 
       //TOKEN GENERATED
-      const token = jwt.sign({ email: user.email, id: user._id }, SECRET_KEY, {
+      const token = sign({ email: user.email, id: user._id }, SECRET_KEY, {
         expiresIn: "24h",
       });
 
@@ -131,11 +116,11 @@ class UsersController {
       delete userObj.password;
 
       res.cookie("authorization", token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "strict",
+        // httpOnly: true,
+        // secure: true,
+        // sameSite: "strict",
       });
-      res.status(201).json({
+      return res.status(200).json({
         message: "Successfuly Login ",
         token: token,
         user: userObj,
@@ -152,14 +137,14 @@ class UsersController {
    * @param {import("express").Response} res
    * @returns
    */
-  async signOut(req, res) {
+  async signOut(req: Request, res: Response) {
     try {
       // Taking token from the cookie
       let token = req.cookies.authorization;
       console.log(token);
 
       // Expiring the token in the cookie
-      res.cookie("authorization", "null", { maxAge:1 });
+      res.cookie("authorization", "null", { maxAge: 1 });
       res.status(200).json({ message: "Logout Successfully" });
     } catch (err) {
       console.log(err);
@@ -173,14 +158,14 @@ class UsersController {
    * @param {import("express").Response} res
    * @returns
    */
-  async verifyEmail(req, res) {
+  async verifyEmail(req: Request, res: Response) {
     const id = req.params.id;
     try {
       const isValidMongoId = isValidObjectId(id);
 
       if (isValidMongoId) {
         //FINDING USER AND UPDATING EMAIL VERIFICATION FIELD
-        const user = await userModel.findByIdAndUpdate(
+        const user = await USER.findByIdAndUpdate(
           id,
           { isVerified: true },
           {
@@ -208,11 +193,10 @@ class UsersController {
    * @param {import("express").Response} res
    * @returns
    */
-  async forgotPassword(req, res) {
-    const validator = joi
-      .object()
+  async forgotPassword(req: Request, res: Response) {
+    const validator = JOI.object()
       .keys({
-        email: joi.string().required().email(),
+        email: JOI.string().required().email(),
       })
       .validate(req.body);
 
@@ -221,19 +205,19 @@ class UsersController {
     }
 
     const email = req.body.email;
-    const user = await userModel.exists({ email: email });
+    const user = await USER.exists({ email: email });
     if (!user) {
       return res.status(400).json({ message: "Invalid Email" });
     }
     try {
-      const uuid = Uuid.v4();
+      const uuid = v4();
       this.forgetPasswordData[uuid] = {
         email: email,
         timestamp: Date.now(),
       };
 
       //TOKEN GENERATED
-      const token = jwt.sign({ uuid }, SECRET_KEY, {
+      const token = sign({ uuid }, SECRET_KEY, {
         expiresIn: "120s",
       });
 
@@ -259,7 +243,7 @@ class UsersController {
         message: "Email sent !! kindly check inbox for password change",
         token: token,
       });
-    } catch (err) {
+    } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
   }
@@ -270,37 +254,33 @@ class UsersController {
    * @param {import("express").Response} res
    * @returns
    */
-  async changePassword(req, res) {
+  async changePassword(req: Request, res: Response) {
     const token = req.params.token;
 
-    const validator = joi
-      .object()
-      .keys({
-        password: joi.string().required().min(8),
-      })
-      .validate(req.body);
+    const validator = JOI.object().keys({
+      password: JOI.string().required().min(8),
+    }).validate(req.body);
 
     if (validator.error) {
       return res.status(400).json({ err: validator.error.message });
     }
     try {
       const { password } = req.body;
-      let uuid = null;
-      jwt.verify(token, SECRET_KEY, (err, payload) => {
+      let uuid = "";
+      verify(token, SECRET_KEY, (err, payload: any) => {
         if (err)
           res.status(400).json({ message: "link is expired, try again!" });
         uuid = payload.uuid;
       });
 
       const data = this.forgetPasswordData[uuid];
-
       if (!data) {
         return res.status(400).json({ message: "link is expired, try again!" });
       }
 
-      const hashPassword = await bcrypt.hash(password, 10);
+      const hashPassword = bcrypt.hashSync(password, 10);
 
-      const user = await userModel.updateOne(
+      const user = await USER.updateOne(
         { email: data.email },
         { $set: { password: hashPassword } }
       );
@@ -312,10 +292,8 @@ class UsersController {
       }
 
       return res.status(200).json({ message: "Password Updated successfully" });
-    } catch (err) {
+    } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
   }
 }
-
-module.exports = UsersController;
