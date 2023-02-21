@@ -256,6 +256,7 @@ export class UsersController {
    */
   async changePassword(req: Request, res: Response) {
     const token = req.params.token;
+    console.log("this.changePassword")
 
     const validator = JOI.object().keys({
       password: JOI.string().required().min(8),
